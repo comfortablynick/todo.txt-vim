@@ -1,6 +1,6 @@
 " File:        autoload/todo.vim
 " Description: Todo.txt sorting plugin
-" Author:      David Beniamine <david@beniamine.net>, Peter (fretep) <githib.5678@9ox.net>
+" Author:      Nick Murphy <comfortablynick@gmail.com>,David Beniamine <david@beniamine.net>, Peter (fretep) <githib.5678@9ox.net>
 " Licence:     Vim licence
 " Website:     http://github.com/dbeniamine/todo.txt.vim
 
@@ -8,15 +8,9 @@
 "   '' means no flags
 "   '! i' means reverse and ignore case
 "   for more information on flags, see :help sort
-if (! exists("g:Todo_txt_first_level_sort_mode"))
-    let g:Todo_txt_first_level_sort_mode='i'
-endif
-if (! exists("g:Todo_txt_second_level_sort_mode"))
-    let g:Todo_txt_second_level_sort_mode='i'
-endif
-if (! exists("g:Todo_txt_third_level_sort_mode"))
-    let g:Todo_txt_third_level_sort_mode='i'
-endif
+let g:Todo_txt_first_level_sort_mode = get(g:, 'Todo_txt_first_level_sort_mode', 'i')
+let g:Todo_txt_second_level_sort_mode = get(g:, 'Todo_txt_second_level_sort_mode', 'i')
+let g:Todo_txt_third_level_sort_mode = get(g:, 'Todo_txt_third_level_sort_mode', 'i')
 
 
 " Functions {{{1
@@ -164,20 +158,189 @@ function! todo#RemoveCompleted()
     call s:AppendToFile(l:done_file, l:completed)
 endfunction
 
-function! todo#Sort(type)
+function todo#GetDateRegexForPastDates(...)
+    " Build a RegExp to match all dates prior to a reference date.
+    "
+    " Optionally accepts a (year, month, day) for the date, otherwise assumes the
+    " reference date is the current date.
+    "
+    " In the end, the RegExp will look something like:
+    "   =todo#GetDateRegexForPastDates(2017, 09, 15)
+    "   \v(([01]\d{3}|200\d|201[0-6])\-\d{2}\-\d{2}|(2017\-(0[0-8])\-\d{2})|(2017\-09\-0\d)|(2017\-09\-1[0-4]))
+    "
+    " We split the RegExp into a few alternation groups:
+    "   1. All dates prior to 2000, dates before this are not supported
+    "   2. All previous decades for the reference date century
+    "   3. The current decade up to the year prior to the reference year
+    "   4. All months for the reference year up to the end of the previous month
+    "   5. Days of the month part 1.
+    "   6. Days of the month part 2.
+    "
+    " Will not work on reference dates past 2099, or before 2000.
+    "
+    " Invalid months and days are not checked, i.e. 2015-14-67 will match.
+    "
+    " Years must be 4 digits.
+    "
+
+    " Get the reference date
+    let l:year  = a:0 >= 1 ? a:1 : strftime('%Y')
+    let l:month = a:0 >= 2 ? a:2 : strftime('%m')
+    let l:day   = a:0 >= 3 ? a:3 : strftime('%d')
+
+    " Use very magic mode, and start an alternation
+    let l:overdueRex = '\v('
+
+    " PART 1: 0000-1999
+    " This sucker is static and won't change to year 3000. I'm not coding for the year 3000.
+    let l:overdueRex = l:overdueRex . '([01]\d{3}'
+
+    " PART 2. All previous decades for the reference date century
+    " i.e. for 2017: "200\d", for 2035: "20[0-2]\d"
+    "       for 2000: skip
+    let l:decade = strpart(l:year, 2, 1)    " i.e. the 1 from 2017
+    if l:decade > 0
+        let l:overdueRex = l:overdueRex . '|20'
+        if l:decade > 1
+            let l:overdueRex = l:overdueRex . '[0-' . (l:decade - 1) . ']'
+        else
+            let l:overdueRex = l:overdueRex . '0'
+        endif
+        let l:overdueRex = l:overdueRex . '\d'
+    endif
+
+    " PART 3: This decade, to previous year
+    " i.e. for 2017: "201[0-6]", for 2035: "203[0-4]", for 2000: skip
+    let l:y = strpart(l:year, 3, 1) " Last digit of the year, i.e. 7 for 2017
+    if l:y > 0
+        if l:y > 1
+            let l:overdueRex = l:overdueRex . '|20' . l:decade . '[0-' . (l:y - 1) . ']'
+        else
+            let l:overdueRex = l:overdueRex . '|20' . l:decade . '0'
+        endif
+    endif
+    let l:overdueRex = l:overdueRex . ')\-\d{2}\-\d{2}|'
+
+    " PART 4: All months to the end of the previous month
+    " i.e. for a date of 2017-09-07, "2017-(0[1-8])-\d{2}"
+    "       for 2017-10-01: "2017-(0[0-9])-\d{2}"
+    "       for 2017-11-30: "2017-(0\d|1[0-0])-\d{2}"
+    "       for 2017-12-30: "2017-(0\d|1[0-1])-\d{2}"
+    "       for 2017-01-20: skip
+    " This only applies if the reference date is not in January
+    if l:month > 1
+        let l:overdueRex = l:overdueRex . '(' . l:year . '\-(0'
+        if l:month > 10
+            let l:overdueRex = l:overdueRex . '\d|1'
+        endif
+        let l:y = strpart(printf('%02d', l:month), 1, 1) " Second digit of the month
+        if l:month == 10
+            " When the month is 10, y = 0, and y - 1 = -1 = bad, deal with it.
+            let l:y = 10
+        endif
+        let l:overdueRex = l:overdueRex . '[0-' . (l:y - 1) . '])\-\d{2})|'
+    endif
+
+    " PART 5. Days of the month part 1.
+    " i.e.  for 2017-09-07: skip
+    "       for 2017-12-29: "2017-12-[0-1]\d"
+    let l:y = strpart(printf('%02d', l:day), 0, 1) " First digit of the day
+    if l:y > 0
+        if l:y > 1
+            let l:overdueRex = l:overdueRex . '(' . l:year . '\-' . printf('%02d', l:month) . '\-[0-' . (l:y - 1) . ']\d)|'
+        else
+            let l:overdueRex = l:overdueRex . '(' . l:year . '\-' . printf('%02d', l:month) . '\-0\d)|'
+        endif
+    endif
+
+    " PART 6. Days of the month part 2.
+    " i.e.  for 2017-09-07: "2017-09-0[0-6]"
+    "       for 2017-12-29: "2017-12-2[0-8]"
+    "       for 2017-09-20: skip
+    let l:d = strpart(printf('%02d', l:day), 1, 1) " Last digit of the day
+    if l:d > 0
+        let l:y = strpart(printf('%02d', l:day), 0, 1) " First digit of the day
+        let l:overdueRex = l:overdueRex . '(' . l:year . '\-' . printf('%02d', l:month) . '\-' . l:y
+        if l:d > 1
+            let l:overdueRex = l:overdueRex . '[0-' . (l:d - 1) . ']'
+        else
+            let l:overdueRex = l:overdueRex . '0'
+        endif
+        let l:overdueRex = l:overdueRex . ')'
+    endif
+
+    let l:overdueRex = substitute(l:overdueRex, '|$', '', 'e')
+    let l:overdueRex = l:overdueRex . ')'
+
+    return l:overdueRex
+endfunction
+
+function! todo#GetDateRegexForFutureDates(...)
+    " Get the reference date
+    let l:day   = strftime('%d')
+    let l:month = strftime('%m')
+    let l:year  = strftime('%Y')
+
+    if a:0 >= 1
+        let l:year = a:1
+    endif
+    if a:0 >= 2
+        let l:month = a:2
+    endif
+    if a:0 >= 3
+        let l:day = a:3
+    endif
+
+    " Use very magic mode, and start an alternation
+    let l:futureRex = '\v('
+
+    " Cover for all future years in the century
+    let l:decade = strpart(l:year, 2, 1)
+    let l:unit = strpart(l:year, 3, 1)
+
+    let l:futureRex = l:futureRex . '(20[' . l:decade . '-9][' . (l:unit + 1) . '-9])\-\d{2}\-\d{2}'
+
+    "Cover for future months in the current year
+    if l:month < 9
+        let l:fmonth = '(0['. (l:month + 1) . '-9]|1[0-2])'
+    else
+        let l:fmonth = '(' . (l:month + 1) . ')'
+    endif
+    let l:futureRex = l:futureRex . '|(' . l:year . '\-' . l:fmonth . '\-\d{2})'
+
+    "Cover for future days in the current month
+    if l:day < 9
+        let l:fday = '(0[' . (l:day + 1) . '-9]|[123][0-9])'
+    else
+        if l:day < 19
+            let l:fday = '(1[' . (l:day - 9) . '-9]|[23][0-9])'
+        else
+            if l:day < 29
+                let l:fday = '(2[' . (l:day -19) . '-9]|3[01])'
+            else
+                let l:fday = '(' . (l:day + 1) . ')'
+            endif
+        endif
+    endif
+
+    let l:futureRex = l:futureRex . '|(' . l:year . '\-' . l:month . '\-' . l:fday . '))'
+    return l:futureRex
+endfunction
+
+function todo#Sort(type)
     " vim :sort is usually stable
     " we sort first on contexts, then on projects and then on priority
-    let g:Todo_fold_char='x'
-    let oldcursor=todo#GetCurpos()
-    if(a:type != "")
-        exec ':sort /.\{-}\ze'.a:type.'/'
-    elseif expand('%')=~'[Dd]one.*.txt'
+    let g:Todo_fold_char = 'x'
+    let l:oldcursor = todo#GetCurpos()
+    if a:type !=# ''
+        execute ':sort /.\{-}\ze'.a:type.'/'
+    elseif expand('%') =~# '[Dd]one.*.txt'
         " FIXME: Put some unit tests around this, and fix case sensitivity if ignorecase is set.
         silent! %s/\(x\s*\d\{4}\)-\(\d\{2}\)-\(\d\{2}\)/\1\2\3/g
         sort n /^x\s*/
         silent! %s/\(x\s*\d\{4}\)\(\d\{2}\)/\1-\2-/g
     else
-        silent normal gg
+        silent normal! gg
         let l:first=search('^\s*x')
         if  l:first != 0
             sort /^./r
@@ -192,8 +355,8 @@ function! todo#Sort(type)
         silent sort /+[a-zA-Z]*/ r
         silent sort /\v\([A-Z]\)/ r
         "Now tasks without priority are at beggining, move them to the end
-        silent normal gg
-        let l:firstP=search('^\s*([A-Z])', 'cn')
+        silent normal! gg
+        let l:firstP = search('^\s*([A-Z])', 'cn')
         if  l:firstP > 1
             let num=l:firstP-1
             " Sort normal
@@ -207,7 +370,7 @@ function! todo#Sort(type)
             silent execute ':'.l:first.','.l:last.'sort /\v([A-Z])/ r'
         endif
     endif
-    call setpos('.', oldcursor)
+    call setpos('.', l:oldcursor)
 endfunction
 
 function! todo#SortDue()
@@ -293,57 +456,57 @@ endfunction
 " todo.txt syntax, it means by priority. This sort is done if and only if the
 " las argument is not 0
 function! todo#HierarchicalSort(symbol, symbolsub, dolastsort)
-    if v:statusmsg =~ '--No lines in buffer--'
+    if v:statusmsg =~# '--No lines in buffer--'
         "Empty buffer do nothing
         return
     endif
-    let g:Todo_fold_char=a:symbol
+    let g:Todo_fold_char = a:symbol
     "if the sort modes doesn't start by '!' it must start with a space
-    let l:sortmode=Todo_txt_InsertSpaceIfNeeded(g:Todo_txt_first_level_sort_mode)
-    let l:sortmodesub=Todo_txt_InsertSpaceIfNeeded(g:Todo_txt_second_level_sort_mode)
-    let l:sortmodefinal=Todo_txt_InsertSpaceIfNeeded(g:Todo_txt_third_level_sort_mode)
+    let l:sortmode = Todo_txt_InsertSpaceIfNeeded(g:Todo_txt_first_level_sort_mode)
+    let l:sortmodesub = Todo_txt_InsertSpaceIfNeeded(g:Todo_txt_second_level_sort_mode)
+    let l:sortmodefinal = Todo_txt_InsertSpaceIfNeeded(g:Todo_txt_third_level_sort_mode)
 
     " Count the number of lines
-    let l:position= todo#GetCurpos()
-    execute "silent normal G"
-    let l:linecount=getpos(".")[1]
-    if(exists("g:Todo_txt_debug"))
-        echo "Linescount: ".l:linecount
+    let l:position = todo#GetCurpos()
+    silent normal! G
+    let l:linecount = getpos('.')[1]
+    if exists('g:Todo_txt_debug')
+        echo 'Linecount:' l:linecount
     endif
-    execute "silent normal gg"
+    silent normal! gg
 
     " Get all the groups names
-    let l:groups=GetGroups(a:symbol,1,l:linecount)
-    if(exists("g:Todo_txt_debug"))
-        echo "Groups: "
+    let l:groups = GetGroups(a:symbol,1,l:linecount)
+    if exists('g:Todo_txt_debug')
+        echo 'Groups: '
         echo l:groups
         echo 'execute sort'.l:sortmode.' /.\{-}\ze'.a:symbol.'/'
     endif
     " Sort by groups
     execute 'sort'.l:sortmode.' /.\{-}\ze'.a:symbol.'/'
     for l:g in l:groups
-        let l:pat=a:symbol.l:g.'.*$'
-        if(exists("g:Todo_txt_debug"))
+        let l:pat = a:symbol.l:g.'.*$'
+        if exists('g:Todo_txt_debug')
             echo l:pat
         endif
-        normal gg
+        normal! gg
         " Find the beginning of the group
-        let l:groupBegin=search(l:pat,'c')
+        let l:groupBegin = search(l:pat,'c')
         " Find the end of the group
-        let l:groupEnd=search(l:pat,'b')
+        let l:groupEnd = search(l:pat,'b')
 
         " I'm too lazy to sort groups of one line
-        if(l:groupEnd==l:groupBegin)
+        if l:groupEnd ==# l:groupBegin
             continue
         endif
         if a:dolastsort
-            if( a:symbolsub!='')
+            if a:symbolsub !=# ''
                 " Sort by subgroups
                 let l:subgroups=GetGroups(a:symbolsub,l:groupBegin,l:groupEnd)
                 " Go before the first line of the group
                 " Sort the group using the second symbol
                 for l:sg in l:subgroups
-                    normal gg
+                    normal! gg
                     let l:pat=a:symbol.l:g.'.*'.a:symbolsub.l:sg.'.*$\|'.a:symbolsub.l:sg.'.*'.a:symbol.l:g.'.*$'
                     " Find the beginning of the subgroup
                     let l:subgroupBegin=search(l:pat,'c')
@@ -354,7 +517,7 @@ function! todo#HierarchicalSort(symbol, symbolsub, dolastsort)
                 endfor
             else
                 " Sort by priority
-                if(exists("g:Todo_txt_debug"))
+                if exists('g:Todo_txt_debug')
                     echo 'execute '.l:groupBegin.','.l:groupEnd.'sort'.l:sortmodefinal
                 endif
                 execute l:groupBegin.','.l:groupEnd.'sort'.l:sortmodefinal
@@ -362,7 +525,7 @@ function! todo#HierarchicalSort(symbol, symbolsub, dolastsort)
         endif
     endfor
     " Restore the cursor position
-    call setpos('.', position)
+    call setpos('.', l:position)
 endfunction
 
 " Returns the list of groups starting by a:symbol between lines a:begin and
@@ -372,7 +535,7 @@ function! GetGroups(symbol,begin, end)
     let l:groups=[]
     while l:curline <= a:end
         let l:curproj=strpart(matchstr(getline(l:curline),a:symbol.'\S*'),len(a:symbol))
-        if l:curproj != "" && index(l:groups,l:curproj) == -1
+        if l:curproj !=# '' && index(l:groups,l:curproj) == -1
             let l:groups=add(l:groups , l:curproj)
         endif
         let l:curline += 1
@@ -384,8 +547,8 @@ endfunction
 " sort parameters
 function! Todo_txt_InsertSpaceIfNeeded(str)
     let l:c=strpart(a:str,1,1)
-    if( l:c != '!' && l:c !=' ')
-        return " ".a:str
+    if l:c !=# '!' && l:c !=# ' '
+        return ' '.a:str
     endif
     retur a:str
 endfunction
@@ -466,7 +629,7 @@ function! todo#CreateNewRecurrence(triggerOnNonStrict)
     " Move onto the copied task
     call cursor(l:new_task_line_num, col('.'))
     if l:new_task_line_num != line('.')
-        throw "Failed to move cursor"
+        throw 'Failed to move cursor'
     endif
 endfunction
 
@@ -513,7 +676,7 @@ function! todo#ChangeDueDate(units, unit_type, from_reference)
     let l:duedate = todo#DateStringAdd(l:duedate, v:count1 * a:units, a:unit_type)
 
     if setline('.', substitute(l:currentline, l:dueDateRex, l:duedate, '')) != 0
-        throw "Failed to set line"
+        throw 'Failed to set line'
     endif
 endfunction "}}}
 
