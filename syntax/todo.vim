@@ -47,7 +47,7 @@ highlight  default  link  TodoPriorityA  Identifier
 highlight  default  link  TodoPriorityB  statement
 highlight  default  link  TodoPriorityC  type
 highlight  default  link  TodoDate       PreProc
-highlight  default  link  TodoProject    Special
+highlight  default  link  TodoProject    Function
 highlight  default  link  TodoContext    Special
 highlight  default  link  TodoDueToday   Todo
 

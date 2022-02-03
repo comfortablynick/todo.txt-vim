@@ -30,26 +30,26 @@ noremap  <script> <silent> <buffer> <Plug>(DoCancel) :call todo#ToggleMarkAsDone
 " Default key mappings {{{2
 if !get(g:, 'Todo_txt_do_not_map', 0)
     " Sort todo by (first) context {{{3
-    noremap  <script> <buffer> <LocalLeader>sc  <Cmd>call todo#HierarchicalSort('@', '', 1)<CR>
-    noremap  <script> <buffer> <LocalLeader>scp <Cmd>call todo#HierarchicalSort('@', '+', 1)<CR>
+    noremap  <buffer> <LocalLeader>sc  <Cmd>call todo#HierarchicalSort('@', '', 1)<CR>
+    noremap  <buffer> <LocalLeader>scp <Cmd>call todo#HierarchicalSort('@', '+', 1)<CR>
 
     " Sort todo by (first) project {{{3
-    noremap  <script> <buffer> <LocalLeader>sp  <Cmd>call todo#HierarchicalSort('+', '',1)<CR>
-    noremap  <script> <buffer> <LocalLeader>spc <Cmd>call todo#HierarchicalSort('+', '@',1)<CR>
+    noremap  <buffer> <LocalLeader>sp  <Cmd>call todo#HierarchicalSort('+', '',1)<CR>
+    noremap  <buffer> <LocalLeader>spc <Cmd>call todo#HierarchicalSort('+', '@',1)<CR>
 
     " Sort tasks {{{3
-    nnoremap <script> <silent> <buffer> <LocalLeader>s :call todo#Sort("")<CR>
-    nnoremap <script> <silent> <buffer> <LocalLeader>s@ :call todo#Sort("@")<CR>
-    nnoremap <script> <silent> <buffer> <LocalLeader>s+ :call todo#Sort("+")<CR>
+    nnoremap <buffer> <LocalLeader>s <Cmd>call todo#Sort("")<CR>
+    nnoremap <buffer> <LocalLeader>s@ <Cmd>call todo#Sort("@")<CR>
+    nnoremap <buffer> <LocalLeader>s+ <Cmd>call todo#Sort("+")<CR>
 
     " Priorities {{{3
     " TODO: Make vim-repeat work on inc/dec priority
-    noremap  <script> <silent> <buffer> <LocalLeader>j :call todo#PrioritizeIncrease()<CR>
-    noremap  <script> <silent> <buffer> <LocalLeader>k :call todo#PrioritizeDecrease()<CR>
+    noremap  <buffer> <LocalLeader>j <Cmd>call todo#PrioritizeIncrease()<CR>
+    noremap  <buffer> <LocalLeader>k <Cmd>call todo#PrioritizeDecrease()<CR>
 
-    noremap  <script> <silent> <buffer> <LocalLeader>a :call todo#PrioritizeAdd('A')<CR>
-    noremap  <script> <silent> <buffer> <LocalLeader>b :call todo#PrioritizeAdd('B')<CR>
-    noremap  <script> <silent> <buffer> <LocalLeader>c :call todo#PrioritizeAdd('C')<CR>
+    noremap  <buffer> <LocalLeader>a <Cmd>call todo#PrioritizeAdd('A')<CR>
+    noremap  <buffer> <LocalLeader>b <Cmd>call todo#PrioritizeAdd('B')<CR>
+    noremap  <buffer> <LocalLeader>c <Cmd>call todo#PrioritizeAdd('C')<CR>
 
     " Insert date {{{3
     if get(g:, 'TodoTxtUseAbbrevInsertMode', 0)
@@ -94,9 +94,9 @@ endif
 " Additional options {{{2
 " Prefix creation date when opening a new line {{{3
 if get(g:, 'Todo_txt_prefix_creation_date', 1)
-    nnoremap <script> <silent> <buffer> o o<C-R>=strftime("%Y-%m-%d")<CR>
-    nnoremap <script> <silent> <buffer> O O<C-R>=strftime("%Y-%m-%d")<CR>
-    inoremap <script> <silent> <buffer> <CR> <CR><C-R>=strftime("%Y-%m-%d")<CR> 
+    nnoremap <buffer> o o<C-R>=strftime("%Y-%m-%d ")<CR>
+    nnoremap <buffer> O O<C-R>=strftime("%Y-%m-%d ")<CR>
+    inoremap <buffer> <expr> <CR> strftime("\<CR>%Y-%m-%d ")
 endif
 
 " Functions for maps {{{1

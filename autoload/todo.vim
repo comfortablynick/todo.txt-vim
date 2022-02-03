@@ -1,3 +1,4 @@
+" vint: -ProhibitCommandWithUnintendedSideEffect -ProhibitCommandRelyOnUser
 " File:        autoload/todo.vim
 " Description: Todo.txt sorting plugin
 " Author:      Nick Murphy <comfortablynick@gmail.com>,David Beniamine <david@beniamine.net>, Peter (fretep) <githib.5678@9ox.net>
@@ -14,110 +15,97 @@ let g:Todo_txt_third_level_sort_mode = get(g:, 'Todo_txt_third_level_sort_mode',
 
 
 " Functions {{{1
-
-
-function! todo#GetCurpos()
-    if exists("*getcurpos")
-        return getcurpos()
-    endif
-        return getpos('.')
-endfunction
-
-function! todo#PrioritizeIncrease()
+function todo#PrioritizeIncrease()
     normal! 0f)h
 endfunction
 
-function! todo#PrioritizeDecrease()
+function todo#PrioritizeDecrease()
     normal! 0f)h
 endfunction
 
-function! todo#PrioritizeAdd (priority)
-    let oldpos=todo#GetCurpos()
-    let line=getline('.')
-    if line !~ '^([A-F])'
-        :call todo#PrioritizeAddAction(a:priority)
-        let oldpos[2]+=4
+function todo#PrioritizeAdd(priority)
+    let l:line = getline('.')
+    if l:line !~# '^([A-Z])'
+        let l:oldpos = getcurpos()
+        call setline('.', printf('(%s) %s', a:priority, l:line))
+        let l:oldpos[2] += 4
+        call setpos('.', l:oldpos)
     else
-        exec ':s/^([A-F])/('.a:priority.')/'
+        call setline('.', substitute(l:line, '^([A-Z])', '('..a:priority..')', ''))
     endif
-    call setpos('.',oldpos)
 endfunction
 
-function! todo#PrioritizeAddAction (priority)
-    execute "normal! mq0i(".a:priority.") \<esc>`q"
-    execute "delmarks q"
+function todo#RemovePriority()
+    call setline('.', substitute(getline('.'), '^([A-Z])\s\+', '', ''))
 endfunction
 
-function! todo#RemovePriority()
-    :s/^(\w)\s\+//ge
-endfunction
-
-function! todo#PrependDate()
-    if (getline(".") =~ '\v^\(')
-        execute "normal! 0f)a\<space>\<esc>l\"=strftime(\"%Y-%m-%d\")\<esc>P"
+function todo#PrependDate()
+    let l:line = getline('.')
+    if l:line =~# '\v^\('
+        normal! 0fa\<space>\<esc>l\"=strftime(\"%Y-%m-%d\")\<esc>P
     else
-        execute "normal! I\<c-r>=strftime(\"%Y-%m-%d \")\<cr>"
+        call setline('.', strftime('%Y-%m-%d ') .. l:line)
     endif
 endfunction
 
 function todo#SaveRegisters()
-    let s:last_search=@/
+    let s:last_search = @/
 endfunction
 
 function todo#RestoreRegisters()
-    let @/=s:last_search
+    let @/ = s:last_search
 endfunction
 
-function! todo#ToggleMarkAsDone(status)
+function todo#ToggleMarkAsDone(status)
     call todo#SaveRegisters()
-    if (getline(".") =~ '\C^x\s*\d\{4\}')
-        :call todo#UnMarkAsDone(a:status)
+    if getline('.') =~# '\C^x\s*\d\{4\}'
+        call todo#UnMarkAsDone(a:status)
     else
-        :call todo#MarkAsDone(a:status)
+        call todo#MarkAsDone(a:status)
     endif
     call todo#RestoreRegisters()
 endfunction
 
-function! todo#FixFormat()
+function todo#FixFormat()
     " Remove heading space
     silent! %s/\C^\s*//
     " Remove priority from done tasks
     silent! %s/\C^x (\([A-Z]\)) \(.*\)/x \2 pri:\1/
 endfunction
 
-function! todo#UnMarkAsDone(status)
-    if a:status==''
-        let pat=''
+function todo#UnMarkAsDone(status)
+    if a:status ==# ''
+        let l:pat = ''
     else
-        let pat=' '.a:status
+        let l:pat = ' ' .. a:status
     endif
-    exec ':s/\C^x\s*\d\{4}-\d\{1,2}-\d\{1,2}'.pat.'\s*//g'
+    exec ':s/\C^x\s*\d\{4}-\d\{1,2}-\d\{1,2}' .. l:pat .. '\s*//g'
     silent s/\C\(.*\) pri:\([A-Z]\)/(\2) \1/e
 endfunction
 
-function! todo#MarkAsDone(status)
+function todo#MarkAsDone(status)
     call todo#CreateNewRecurrence(1)
     if get(g:, 'TodoTxtStripDoneItemPriority', 0)
         exec ':s/\C^(\([A-Z]\))\(.*\)/\2/e'
     else
         exec ':s/\C^(\([A-Z]\))\(.*\)/\2 pri:\1/e'
     endif
-    if a:status!=''
-        exec 'normal! I'.a:status.' '
+    if a:status !=# ''
+        exec 'normal! I' .. a:status .. ' '
     endif
     call todo#PrependDate()
-    if (getline(".") =~ '^ ')
+    if getline('.') =~# '^ '
         normal! gIx
     else
         normal! Ix 
     endif
 endfunction
 
-function! todo#MarkAllAsDone()
+function todo#MarkAllAsDone()
     :g!/^x /:call todo#MarkAsDone('')
 endfunction
 
-function! s:AppendToFile(file, lines)
+function s:AppendToFile(file, lines)
     let l:lines = []
 
     " Place existing tasks in done.txt at the beggining of the list.
@@ -132,24 +120,24 @@ function! s:AppendToFile(file, lines)
     call writefile(l:lines, a:file)
 endfunction
 
-function! todo#RemoveCompleted()
+function todo#RemoveCompleted()
     " Check if we can write to done.txt before proceeding.
     let l:target_dir = expand('%:p:h')
-    if exists("g:TodoTxtForceDoneName")
+    if exists('g:TodoTxtForceDoneName')
         let l:done=g:TodoTxtForceDoneName
     else
         let l:currentfile=expand('%:t')
 
-        if l:currentfile =~ '[Tt]oday.txt'
+        if l:currentfile =~# '[Tt]oday.txt'
             let l:done=substitute(substitute(l:currentfile,'today','done-today',''),'Today','Done-Today','')
         else
             let l:done=substitute(substitute(l:currentfile,'todo','done',''),'Todo','Done','')
         endif
     endif
-    let l:done_file = l:target_dir.'/'.l:done
-    echo "Writing to ".l:done_file
+    let l:done_file = l:target_dir .. '/' .. l:done
+    echo 'Writing to' l:done_file
     if !filewritable(l:done_file) && !filewritable(l:target_dir)
-        echoerr "Can't write to file '".l:done_file."'"
+        echoerr printf("Can't write to file '%s'", l:done_file)
         return
     endif
 
@@ -275,7 +263,7 @@ function todo#GetDateRegexForPastDates(...)
     return l:overdueRex
 endfunction
 
-function! todo#GetDateRegexForFutureDates(...)
+function todo#GetDateRegexForFutureDates(...)
     " Get the reference date
     let l:day   = strftime('%d')
     let l:month = strftime('%m')
@@ -331,7 +319,7 @@ function todo#Sort(type)
     " vim :sort is usually stable
     " we sort first on contexts, then on projects and then on priority
     let g:Todo_fold_char = 'x'
-    let l:oldcursor = todo#GetCurpos()
+    let l:oldcursor = getcurpos()
     if a:type !=# ''
         execute ':sort /.\{-}\ze'.a:type.'/'
     elseif expand('%') =~# '[Dd]one.*.txt'
@@ -358,9 +346,9 @@ function todo#Sort(type)
         silent normal! gg
         let l:firstP = search('^\s*([A-Z])', 'cn')
         if  l:firstP > 1
-            let num=l:firstP-1
+            let l:num = l:firstP-1
             " Sort normal
-            silent execute ':1 d b'.num
+            silent execute ':1 d b' .. l:num
             silent normal G"bp
         endif
         if l:first != 0
@@ -373,7 +361,7 @@ function todo#Sort(type)
     call setpos('.', l:oldcursor)
 endfunction
 
-function! todo#SortDue()
+function todo#SortDue()
     " Check how many lines have a due:date on them
     let l:tasksWithDueDate = 0
     silent! %global/\v\c<due:\d{4}-\d{2}-\d{2}>/let l:tasksWithDueDate += 1
@@ -392,20 +380,20 @@ function! todo#SortDue()
     " Sort all the lines with due: by numeric yyyymmdd, they will end up in ascending order at the bottom of the buffer
     sort in /\v\c<due:\ze\d{8}>/
     " Determine the line number of the first task with a due:date
-    let l:firstLineWithDue = line("$") - l:tasksWithDueDate + 1
+    let l:firstLineWithDue = line('$') - l:tasksWithDueDate + 1
     " Put the sorted lines at the beginning of the file
     if l:firstLineWithDue > 1
         " ...but only if the whole file didn't get sorted.
-        execute "silent " . l:firstLineWithDue . ",$move 0"
+        execute 'silent ' .. l:firstLineWithDue .. ',$move 0'
     endif
     " Change the due:yyyymmdd back to due:yyyy-mm-dd.
     silent! %substitute/\v<(due:\d{4})(\d{2})(\d{2})>/\1-\2-\3/ei
     silent global/\C^x /move$
     " Let's check a global for a user preference on the cursor position.
-    if exists("g:TodoTxtSortDueDateCursorPos")
-        if g:TodoTxtSortDueDateCursorPos ==? "top"
+    if exists('g:TodoTxtSortDueDateCursorPos')
+        if g:TodoTxtSortDueDateCursorPos ==? 'top'
             normal gg
-        elseif g:TodoTxtSortDueDateCursorPos ==? "lastdue" || g:TodoTxtSortDueDateCursorPos ==? "notoverdue"
+        elseif g:TodoTxtSortDueDateCursorPos ==? 'lastdue' || g:TodoTxtSortDueDateCursorPos ==? 'notoverdue'
             silent normal G
             " Sorry for the crazy RegExp. The next command should put cursor at at the top of the completed tasks,
             " or the bottom of the buffer. This is done by searching backwards for any line not starting with
@@ -416,15 +404,15 @@ function! todo#SortDue()
             let l:lastwrapscan = &wrapscan
             set nowrapscan
             try
-                if g:TodoTxtSortDueDateCursorPos ==? "lastdue"
+                if g:TodoTxtSortDueDateCursorPos ==? 'lastdue'
                     " This searches backwards for the last due task
                     :?\v\c<due:\d{4}\-\d{2}\-\d{2}>
                     " Try a forward search in case the last line of the buffer was a due:date task, don't match done
                     " Be sure to enforce case sensitivity on "x" while allowing mixed case on "due:"
                     :silent! /\v\C^(x )@!&.*<[dD][uU][eE]:\d{4}\-\d{2}\-\d{2}>
-                elseif g:TodoTxtSortDueDateCursorPos ==? "notoverdue"
+                elseif g:TodoTxtSortDueDateCursorPos ==? 'notoverdue'
                     " This searches backwards for the last overdue task, and positions the cursor on the following line
-                    execute ":?\\v\\c<due:" . l:overduePat . ">?+1"
+                    execute ":?\\v\\c<due:" . l:overduePat . '>?+1'
                 endif
             catch
                 " Might fail if there are no active (or overdue) due:date tasks. Requires nowrapscan
@@ -433,7 +421,7 @@ function! todo#SortDue()
             finally
                 let &wrapscan = l:lastwrapscan
             endtry
-        elseif g:TodoTxtSortDueDateCursorPos ==? "bottom"
+        elseif g:TodoTxtSortDueDateCursorPos ==? 'bottom'
             silent normal G
         endif
     else
@@ -455,7 +443,7 @@ endfunction
 " The last level of sort is done directly on the line, so according to
 " todo.txt syntax, it means by priority. This sort is done if and only if the
 " las argument is not 0
-function! todo#HierarchicalSort(symbol, symbolsub, dolastsort)
+function todo#HierarchicalSort(symbol, symbolsub, dolastsort)
     if v:statusmsg =~# '--No lines in buffer--'
         "Empty buffer do nothing
         return
@@ -467,7 +455,7 @@ function! todo#HierarchicalSort(symbol, symbolsub, dolastsort)
     let l:sortmodefinal = Todo_txt_InsertSpaceIfNeeded(g:Todo_txt_third_level_sort_mode)
 
     " Count the number of lines
-    let l:position = todo#GetCurpos()
+    let l:position = getcurpos()
     silent normal! G
     let l:linecount = getpos('.')[1]
     if exists('g:Todo_txt_debug')
@@ -530,7 +518,7 @@ endfunction
 
 " Returns the list of groups starting by a:symbol between lines a:begin and
 " a:end
-function! GetGroups(symbol,begin, end)
+function GetGroups(symbol,begin, end)
     let l:curline=a:begin
     let l:groups=[]
     while l:curline <= a:end
@@ -545,7 +533,7 @@ endfunction
 
 " Insert a space if needed (the first char isn't '!' or ' ') in front of 
 " sort parameters
-function! Todo_txt_InsertSpaceIfNeeded(str)
+function Todo_txt_InsertSpaceIfNeeded(str)
     let l:c=strpart(a:str,1,1)
     if l:c !=# '!' && l:c !=# ' '
         return ' '.a:str
@@ -554,7 +542,7 @@ function! Todo_txt_InsertSpaceIfNeeded(str)
 endfunction
 
 " function todo#CreateNewRecurrence {{{2
-function! todo#CreateNewRecurrence(triggerOnNonStrict)
+function todo#CreateNewRecurrence(triggerOnNonStrict)
     " Given a line with a rec:timespan, create a new task based off the
     " recurrence and move the recurring tasks due:date to the next occurrence.
     "
@@ -581,14 +569,14 @@ function! todo#CreateNewRecurrence(triggerOnNonStrict)
         " the user, and abort whatever is happening otherwise a recurring task
         " might be marked complete without a new recurrence being created.
         if l:currentline =~? '\v\c(^|\s)rec:'
-            throw "Recurrence pattern is invalid. Aborting operation."
+            throw 'Recurrence pattern is invalid. Aborting operation.'
         endif
         return
     endif
 
     " Operations like postponing a task should not trigger the task to be
     " duplicated, non-strict mode allows the changing of the due date.
-    let l:is_strict = l:rec_parts[2] ==# "+"
+    let l:is_strict = l:rec_parts[2] ==# '+'
     if ! a:triggerOnNonStrict && ! l:is_strict
         return
     endif
@@ -611,7 +599,7 @@ function! todo#CreateNewRecurrence(triggerOnNonStrict)
     " Insert above current line
     let l:new_task_line_num = line('.')
     if append(l:new_task_line_num - 1, l:newline) != 0
-        throw "Failed at append line"
+        throw 'Failed at append line'
     endif
 
     " At this point, we need to change the due date of the recurring task.
@@ -634,7 +622,7 @@ function! todo#CreateNewRecurrence(triggerOnNonStrict)
 endfunction
 
 " function todo#ChangeDueDate {{{2
-function! todo#ChangeDueDate(units, unit_type, from_reference)
+function todo#ChangeDueDate(units, unit_type, from_reference)
     " Change the due:date on the current line by a number of days, months or
     " years
     "
@@ -683,7 +671,7 @@ endfunction "}}}
 " General date calculation functions {{{1
 
 " function todo#GetDaysInMonth {{{2
-function! todo#GetDaysInMonth(month, year)
+function todo#GetDaysInMonth(month, year)
     " Given a month and year, returns the number of days in the month, taking
     " leap years into consideration.
 
@@ -706,7 +694,7 @@ function! todo#GetDaysInMonth(month, year)
 endfunction
 
 " function todo#DateAdd {{{2
-function! todo#DateAdd(year, month, day, units, unit_type)
+function todo#DateAdd(year, month, day, units, unit_type)
     " Add or subtract days, months or years from a date
     "
     " Date must be passed in components of year, month and day, all integers
@@ -730,7 +718,7 @@ function! todo#DateAdd(year, month, day, units, unit_type)
     " all that scary to roll our own - we just need to watch out for leap years.
 
     " Check and clean up input
-    if index(["d", "D", "w", "W", "m", "M", "y", "Y"], a:unit_type) < 0
+    if index(['d', 'D', 'w', 'W', 'm', 'M', 'y', 'Y'], a:unit_type) < 0
         throw 'Invalid unit "'. a:unit_type . '" passed to todo#DateAdd()'
     endif
 
@@ -740,11 +728,11 @@ function! todo#DateAdd(year, month, day, units, unit_type)
     let l:i = str2nr(a:units)
 
     " Years can be handled simply as 12 x months, weeks as 7 x days
-    if a:unit_type ==? "y"
-        let l:utype = "m"
+    if a:unit_type ==? 'y'
+        let l:utype = 'm'
         let l:i = l:i * 12
-    elseif a:unit_type ==? "w"
-        let l:utype = "d"
+    elseif a:unit_type ==? 'w'
+        let l:utype = 'd'
         let l:i = l:i * 7
     else
         let l:utype = a:unit_type
@@ -759,7 +747,7 @@ function! todo#DateAdd(year, month, day, units, unit_type)
         endif
     endif
     if l:m > 12
-        if l:i < 0 && l:utype ==? "m"
+        if l:i < 0 && l:utype ==? 'm'
             " Subtracting an invalid (high) month
             " See comments for passing a high day below. Same reason for this.
             let l:m = 13
@@ -795,7 +783,7 @@ function! todo#DateAdd(year, month, day, units, unit_type)
     "     let l:d = l:daysInMonth
     " endif
 
-    if l:utype ==? "d"
+    if l:utype ==? 'd'
         " Adding DAYS
         while l:i > 0
             let l:d += 1
@@ -830,7 +818,7 @@ function! todo#DateAdd(year, month, day, units, unit_type)
             endif
             let l:i += 1
         endwhile
-    elseif l:utype ==? "m"
+    elseif l:utype ==? 'm'
         if l:d >= l:daysInMonth
             let l:wasLastDayOfMonth = 1
         else
@@ -882,7 +870,7 @@ function! todo#DateAdd(year, month, day, units, unit_type)
 endfunction
 
 " function todo#DateStringAdd {{{2
-function! todo#DateStringAdd(date, units, unit_type)
+function todo#DateStringAdd(date, units, unit_type)
     " A very thin overload of todo#DateAdd() that takes and returns the date as
     " a string rather than in [year, month, day] component form.
     "
@@ -896,7 +884,7 @@ function! todo#DateStringAdd(date, units, unit_type)
 endfunction
 
 " function todo#ParseDate {{{2
-function! todo#ParseDate(datestring)
+function todo#ParseDate(datestring)
     " Given a date as a string in the format "YYYY-MM-DD", split the date into a
     " list [year, month, day]
     "
@@ -915,103 +903,103 @@ endfunction "}}}
 " Completion {{{1
 
 " Simple keyword completion on all buffers {{{2
-function! TodoKeywordComplete(base)
+function TodoKeywordComplete(base)
     " Search for matches
-    let res = []
-    for bufnr in range(1,bufnr('$'))
-        let lines=getbufline(bufnr,1,"$")
-        for line in lines
-            if line =~ a:base
+    let l:res = []
+    for l:bufnr in range(1,bufnr('$'))
+        let l:lines = getbufline(l:bufnr,1,'$')
+        for l:line in l:lines
+            if l:line =~ a:base
                 " init temporary item
-                let item={}
-                let item.word=substitute(line,'.*\('.a:base.'\S*\).*','\1',"")
-                call add(res,item)
+                let l:item = {}
+                let l:item.word = substitute(l:line,'.*\(' .. a:base .. '\S*\).*','\1','')
+                call add(l:res,l:item)
             endif
         endfor
     endfor
-    return res
+    return l:res
 endfunction
 
 " Convert an item to the completion format and add it to the completion list
-fun! TodoAddToCompletionList(list,item,opp)
+function TodoAddToCompletionList(list,item,opp)
     " Create the definitive item
-    let resitem={}
-    let resitem.word=a:item.word
-    let resitem.info=a:opp=='+'?"Projects":"Contexts"
-    let resitem.info.=": ".join(a:item.related, ", ")
-                \."\nBuffers: ".join(a:item.buffers, ", ")
-    call add(a:list,resitem)
+    let l:resitem = {}
+    let l:resitem.word = a:item.word
+    let l:resitem.info = a:opp == '+' ? 'Projects' : 'Contexts'
+    let l:resitem.info ..= ': ' .. join(a:item.related, ', ')
+                \."\nBuffers: " .. join(a:item.buffers, ', ')
+    call add(a:list,l:resitem)
 endfun
 
-fun! TodoCopyTempItem(item)
-    let ret={}
-    let ret.word=a:item.word
-    if has_key(a:item, "related")
-        let ret.related=[a:item.related]
+function TodoCopyTempItem(item)
+    let l:ret = {}
+    let l:ret.word = a:item.word
+    if has_key(a:item, 'related')
+        let l:ret.related = [a:item.related]
     else
-        let ret.related=[]
+        let l:ret.related = []
     endif
-    let ret.buffers=[a:item.buffers]
-    return ret
+    let l:ret.buffers = [a:item.buffers]
+    return l:ret
 endfun
 
 " Intelligent completion for projects and Contexts {{{2
-fun! todo#Complete(findstart, base)
+function todo#Complete(findstart, base)
     if a:findstart
-        let line = getline('.')
-        let start = col('.') - 1
-        while start > 0 && line[start - 1] !~ '\s'
-            let start -= 1
+        let l:line = getline('.')
+        let l:start = col('.') - 1
+        while l:start > 0 && l:line[l:start - 1] !~# '\s'
+            let l:start -= 1
         endwhile
-        return start
+        return l:start
     else
         if a:base !~ '^+' && a:base !~ '^@'
             return TodoKeywordComplete(a:base)
         endif
         " Opposite sign
-        let opp=a:base=~'+'?'@':'+'
+        let l:opp = a:base =~ '+' ? '@' : '+'
         " Search for matchs
-        let res = []
-        for bufnr in range(1,bufnr('$'))
-            let lines=getbufline(bufnr,1,"$")
-            for line in lines
-                if line =~ " ".a:base
+        let l:res = []
+        for l:bufnr in range(1,bufnr('$'))
+            let l:lines = getbufline(l:bufnr,1,'$')
+            for l:line in l:lines
+                if l:line =~ ' ' .. a:base
                     " init temporary item
-                    let item={}
-                    let item.word=substitute(line,'.*\('.a:base.'\S*\).*','\1',"")
-                    let item.buffers=bufname(bufnr)
-                    if line =~ '.*\s\('.opp.'\S\S*\).*'
-                        let item.related=substitute(line,'.*\s\('.opp.'\S\S*\).*','\1',"")
+                    let l:item = {}
+                    let l:item.word = substitute(l:line,'.*\('.a:base.'\S*\).*','\1','')
+                    let l:item.buffers=bufname(l:bufnr)
+                    if l:line =~ '.*\s\('.l:opp.'\S\S*\).*'
+                        let l:item.related=substitute(l:line,'.*\s\('.l:opp.'\S\S*\).*','\1','')
                     endif
-                    call add(res,item)
+                    call add(l:res,l:item)
                 endif
             endfor
         endfor
-        call sort(res)
+        call sort(l:res)
         " Here all results are sorted in res, but we need to merge them
-        let ret=[]
-        if res != []
-            let curitem=TodoCopyTempItem(res[0])
-            for it in res
-                if curitem.word==it.word
+        let l:ret = []
+        if l:res != []
+            let l:curitem = TodoCopyTempItem(l:res[0])
+            for l:it in l:res
+                if l:curitem.word==l:it.word
                     " Merge results
-                    if has_key(it, "related") && index(curitem.related,it.related) <0
-                        call add(curitem.related,it.related)
+                    if has_key(l:it, 'related') && index(l:curitem.related,l:it.related) <0
+                        call add(l:curitem.related,l:it.related)
                     endif
-                    if index(curitem.buffers,it.buffers) <0
-                        call add(curitem.buffers,it.buffers)
+                    if index(l:curitem.buffers,l:it.buffers) <0
+                        call add(l:curitem.buffers,l:it.buffers)
                     endif
                 else
                     " Add to list
-                    call TodoAddToCompletionList(ret,curitem,opp)
+                    call TodoAddToCompletionList(l:ret,l:curitem,l:opp)
                     " Init new item from it
-                    let curitem=TodoCopyTempItem(it)
+                    let l:curitem=TodoCopyTempItem(l:it)
                 endif
             endfor
             " Don't forget to add the list item
-            call TodoAddToCompletionList(ret,curitem,opp)
+            call TodoAddToCompletionList(l:ret,l:curitem,l:opp)
         endif
-        return ret
+        return l:ret
     endif
 endfun
 
