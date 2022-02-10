@@ -56,12 +56,12 @@ function todo#RestoreRegisters()
     let @/ = s:last_search
 endfunction
 
-function todo#ToggleMarkAsDone(status)
+function todo#ToggleMarkAsDone()
     call todo#SaveRegisters()
     if getline('.') =~# '\C^x\s*\d\{4\}'
-        call todo#UnMarkAsDone(a:status)
+        call todo#UnMarkAsDone()
     else
-        call todo#MarkAsDone(a:status)
+        call todo#MarkAsDone()
     endif
     call todo#RestoreRegisters()
 endfunction
@@ -73,36 +73,29 @@ function todo#FixFormat()
     silent! %s/\C^x (\([A-Z]\)) \(.*\)/x \2 pri:\1/
 endfunction
 
-function todo#UnMarkAsDone(status)
-    if a:status ==# ''
-        let l:pat = ''
-    else
-        let l:pat = ' ' .. a:status
-    endif
-    exec ':s/\C^x\s*\d\{4}-\d\{1,2}-\d\{1,2}' .. l:pat .. '\s*//g'
+function todo#UnMarkAsDone()
+    exec ':s/\C^x\s*\d\{4}-\d\{1,2}-\d\{1,2}\s*//g'
     silent s/\C\(.*\) pri:\([A-Z]\)/(\2) \1/e
 endfunction
 
-function todo#MarkAsDone(status)
+function todo#MarkAsDone()
     call todo#CreateNewRecurrence(1)
-    if get(g:, 'TodoTxtStripDoneItemPriority', 0)
-        exec ':s/\C^(\([A-Z]\))\(.*\)/\2/e'
-    else
-        exec ':s/\C^(\([A-Z]\))\(.*\)/\2 pri:\1/e'
+    let l:pat = '\C^(\([A-Z]\))\(.*\)'
+    let l:sub = '\2'
+    let l:line = getline('.')
+    if empty(l:line)
+        return
     endif
-    if a:status !=# ''
-        exec 'normal! I' .. a:status .. ' '
+    if get(g:, 'TodoTxtSaveDoneItemPriority', 0)
+        let l:sub ..= ' pri:\1'
     endif
-    call todo#PrependDate()
-    if getline('.') =~# '^ '
-        normal! gIx
-    else
-        normal! Ix 
-    endif
+    let l:output = substitute(l:line, l:pat, l:sub, 'e')
+    let l:output = 'x' .. strftime(' %Y-%m-%d ') .. trim(l:output)
+    call setline('.', l:output)
 endfunction
 
 function todo#MarkAllAsDone()
-    :g!/^x /:call todo#MarkAsDone('')
+    g!/^x /:call todo#MarkAsDone()
 endfunction
 
 function s:AppendToFile(file, lines)
