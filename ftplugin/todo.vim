@@ -17,15 +17,18 @@ setlocal nrformats+=alpha
 " Mappings {{{1
 " <Plug> mappings that users can map alternate keys to {{{2
 " if they choose not to map default keys (or otherwise)
-nnoremap <script> <silent> <buffer> <Plug>(TodotxtIncrementDueDateNormal) :<C-u>call <SID>ChangeDueDateWrapper(1, "\<Plug>(TodotxtIncrementDueDateNormal)")<CR>
-vnoremap <script> <silent> <buffer> <Plug>(TodotxtIncrementDueDateVisual) :call <SID>ChangeDueDateWrapper(1, "\<Plug>(TodotxtIncrementDueDateVisual)")<CR>
-nnoremap <script> <silent> <buffer> <Plug>(TodotxtDecrementDueDateNormal) :<C-u>call <SID>ChangeDueDateWrapper(-1, "\<Plug>(TodotxtDecrementDueDateNormal)")<CR>
-vnoremap <script> <silent> <buffer> <Plug>(TodotxtDecrementDueDateVisual) :call <SID>ChangeDueDateWrapper(-1, "\<Plug>(TodotxtDecrementDueDateVisual)")<CR>
+nnoremap <silent> <buffer> <Plug>(TodotxtIncrementDueDateNormal) :<C-u>call <SID>ChangeDueDateWrapper(1, "\<Plug>(TodotxtIncrementDueDateNormal)")<CR>
+vnoremap <silent> <buffer> <Plug>(TodotxtIncrementDueDateVisual) :call <SID>ChangeDueDateWrapper(1, "\<Plug>(TodotxtIncrementDueDateVisual)")<CR>
+nnoremap <silent> <buffer> <Plug>(TodotxtDecrementDueDateNormal) :<C-u>call <SID>ChangeDueDateWrapper(-1, "\<Plug>(TodotxtDecrementDueDateNormal)")<CR>
+vnoremap <silent> <buffer> <Plug>(TodotxtDecrementDueDateVisual) :call <SID>ChangeDueDateWrapper(-1, "\<Plug>(TodotxtDecrementDueDateVisual)")<CR>
 
-noremap  <script> <silent> <buffer> <Plug>(DoToggleMarkAsDone) :call todo#ToggleMarkAsDone('')<CR>
-    \:silent! call repeat#set("\<Plug>(DoToggleMarkAsDone)")<CR>
-noremap  <script> <silent> <buffer> <Plug>(DoCancel) :call todo#ToggleMarkAsDone('Cancelled')<CR>
-    \:silent! call repeat#set("\<Plug>(DoCancel)")<CR>
+noremap  <silent> <buffer> <Plug>(TodotxtMarkAsDone) :call todo#ToggleMarkAsDone()<CR>
+    \:call repeat#set("\<Plug>(TodotxtMarkAsDone)", v:count)<CR>
+
+noremap  <silent> <buffer> <Plug>(TodotxtIncrementPriority) :call todo#PrioritizeIncrease()<CR>
+    \:call repeat#set("\<Plug>(TodotxtIncrementPriority)", v:count)<CR>
+noremap  <silent> <buffer> <Plug>(TodotxtDecrementPriority) :call todo#PrioritizeDecrease()<CR>
+    \:call repeat#set("\<Plug>(TodotxtDecrementPriority)", v:count)<CR>
 
 " Default key mappings {{{2
 if !get(g:, 'Todo_txt_do_not_map', 0)
@@ -43,9 +46,8 @@ if !get(g:, 'Todo_txt_do_not_map', 0)
     nnoremap <buffer> <LocalLeader>s+ <Cmd>call todo#Sort("+")<CR>
 
     " Priorities {{{3
-    " TODO: Make vim-repeat work on inc/dec priority
-    noremap  <buffer> <LocalLeader>j <Cmd>call todo#PrioritizeIncrease()<CR>
-    noremap  <buffer> <LocalLeader>k <Cmd>call todo#PrioritizeDecrease()<CR>
+    nmap     <buffer> <LocalLeader>k <Plug>(TodotxtIncrementPriority)
+    nmap     <buffer> <LocalLeader>j <Plug>(TodotxtDecrementPriority)
 
     noremap  <buffer> <LocalLeader>a <Cmd>call todo#PrioritizeAdd('A')<CR>
     noremap  <buffer> <LocalLeader>b <Cmd>call todo#PrioritizeAdd('B')<CR>
@@ -64,30 +66,27 @@ if !get(g:, 'Todo_txt_do_not_map', 0)
         inoremap <script> <silent> <buffer> DUE: DUE:<C-R>=strftime("%Y-%m-%d")<CR>
     endif
 
-    noremap  <script> <silent> <buffer> <LocalLeader>d :call todo#PrependDate()<CR>
+    noremap  <buffer> <LocalLeader>d <Cmd>call todo#PrependDate()<CR>
 
     " Mark done {{{3
-    nmap              <silent> <buffer> <LocalLeader>x <Plug>(DoToggleMarkAsDone)
-
-    " Mark cancelled {{{3
-    nmap              <silent> <buffer> <LocalLeader>C <Plug>(DoCancel)
+    nmap     <buffer> <LocalLeader>x <Plug>(TodotxtMarkAsDone)
 
     " Mark all done {{{3
-    noremap  <script> <silent> <buffer> <LocalLeader>X :call todo#MarkAllAsDone()<CR>
+    noremap  <buffer> <LocalLeader>X <Cmd>call todo#MarkAllAsDone()<CR>
 
     " Remove completed {{{3
-    nnoremap <script> <silent> <buffer> <LocalLeader>D :call todo#RemoveCompleted()<CR>
+    nnoremap <buffer> <LocalLeader>D <Cmd>call todo#RemoveCompleted()<CR>
 
     " Sort by due: date {{{3
-    nnoremap <script> <silent> <buffer> <LocalLeader>sd :call todo#SortDue()<CR>
+    nnoremap <buffer> <LocalLeader>sd <Cmd>call todo#SortDue()<CR>
     " try fix format {{{3
-    nnoremap <script> <silent> <buffer> <LocalLeader>ff :call todo#FixFormat()<CR>
+    nnoremap <buffer> <LocalLeader>ff <Cmd>call todo#FixFormat()<CR>
 
     " increment and decrement due:date {{{3
-    nmap              <silent> <buffer> <LocalLeader>p <Plug>(TodotxtIncrementDueDateNormal)
-    vmap              <silent> <buffer> <LocalLeader>p <Plug>(TodotxtIncrementDueDateVisual)
-    nmap              <silent> <buffer> <LocalLeader>P <Plug>(TodotxtDecrementDueDateNormal)
-    vmap              <silent> <buffer> <LocalLeader>P <Plug>(TodotxtDecrementDueDateVisual)
+    nmap    <buffer> <LocalLeader>p <Plug>(TodotxtIncrementDueDateNormal)
+    vmap    <buffer> <LocalLeader>p <Plug>(TodotxtIncrementDueDateVisual)
+    nmap    <buffer> <LocalLeader>P <Plug>(TodotxtDecrementDueDateNormal)
+    vmap    <buffer> <LocalLeader>P <Plug>(TodotxtDecrementDueDateVisual)
 
 endif
 
